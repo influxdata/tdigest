@@ -19,7 +19,6 @@ func (e Error) Error() string {
 type Centroid struct {
 	Mean   float64
 	Weight float64
-	index  int
 }
 
 func (c *Centroid) String() string {
@@ -27,7 +26,7 @@ func (c *Centroid) String() string {
 }
 
 // Add averages the two centroids together and update this centroid
-func (c *Centroid) Add(r *Centroid) error {
+func (c *Centroid) Add(r Centroid) error {
 	if r.Weight < 0 {
 		return ErrWeightLessThanZero
 	}
@@ -41,65 +40,20 @@ func (c *Centroid) Add(r *Centroid) error {
 	return nil
 }
 
-// CentroidList is a priority queue sorted by the Mean of the centroid, descending.
-type CentroidList struct {
-	Centroids []*Centroid
-	index     int
-}
-
-// Weight returns the summed weight of all centroids
-func (l *CentroidList) Weight() (w float64) {
-	for i := range l.Centroids {
-		w += l.Centroids[i].Weight
-	}
-	return w
-}
-func (l *CentroidList) WeightAt(i int) float64 {
-	return l.Centroids[i].Weight
-}
-func (l *CentroidList) MeanAt(i int) float64 {
-	return l.Centroids[i].Mean
-}
+// CentroidList is sorted by the Mean of the centroid, ascending.
+type CentroidList []Centroid
 
 func (l *CentroidList) Clear() {
-	l.Centroids = l.Centroids[0:0]
+	*l = (*l)[0:0]
 }
 
-func (l *CentroidList) Len() int { return len(l.Centroids) }
-
-func (l *CentroidList) Less(i, j int) bool {
-	return l.Centroids[i].Mean < l.Centroids[j].Mean
-}
-
-func (l *CentroidList) Swap(i, j int) {
-	l.Centroids[i], l.Centroids[j] = l.Centroids[j], l.Centroids[i]
-	l.Centroids[i].index = i
-	l.Centroids[j].index = j
-}
-
-// Push pushes the centroid x onto the CentroidList priority queue
-func (l *CentroidList) Push(x interface{}) {
-	n := len(l.Centroids)
-	item := x.(*Centroid)
-	item.index = n
-	l.Centroids = append(l.Centroids, item)
-}
-
-// Pop removes the centroid with the maximum mean from the priority queue
-func (l *CentroidList) Pop() interface{} {
-	old := l.Centroids
-	n := len(old)
-	item := old[n-1]
-	item.index = -1
-	l.Centroids = old[0 : n-1]
-	return item
-}
+func (l CentroidList) Len() int           { return len(l) }
+func (l CentroidList) Less(i, j int) bool { return l[i].Mean < l[j].Mean }
+func (l CentroidList) Swap(i, j int)      { l[i], l[j] = l[j], l[i] }
 
 // NewCentroidList creates a priority queue for the centroids
-func NewCentroidList(centroids []*Centroid) *CentroidList {
-	l := &CentroidList{
-		Centroids: centroids,
-	}
+func NewCentroidList(centroids []Centroid) CentroidList {
+	l := CentroidList(centroids)
 	sort.Sort(l)
 	return l
 }

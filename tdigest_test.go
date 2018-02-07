@@ -20,6 +20,9 @@ const (
 var NormalData []float64
 var UniformData []float64
 
+var NormalDigest *tdigest.TDigest
+var UniformDigest *tdigest.TDigest
+
 func init() {
 	dist := distuv.Normal{
 		Mu:     Mu,
@@ -27,19 +30,27 @@ func init() {
 		Source: rand.New(rand.NewSource(seed)),
 	}
 	uniform := rand.New(rand.NewSource(seed))
-	NormalData = make([]float64, N)
+
 	UniformData = make([]float64, N)
+	UniformDigest = tdigest.NewWithCompression(1000)
+
+	NormalData = make([]float64, N)
+	NormalDigest = tdigest.NewWithCompression(1000)
+
 	for i := range NormalData {
 		NormalData[i] = dist.Rand()
-		UniformData[i] = uniform.Float64() * 100
-	}
+		NormalDigest.Add(NormalData[i], 1)
 
+		UniformData[i] = uniform.Float64() * 100
+		UniformDigest.Add(UniformData[i], 1)
+	}
 }
 
 func TestTdigest_Quantile(t *testing.T) {
 	tests := []struct {
 		name     string
 		data     []float64
+		digest   *tdigest.TDigest
 		quantile float64
 		want     float64
 	}{
@@ -56,39 +67,152 @@ func TestTdigest_Quantile(t *testing.T) {
 			want:     3,
 		},
 		{
+			name:     "small 99 (max)",
+			quantile: 0.99,
+			data:     []float64{1, 2, 3, 4, 5, 5, 4, 3, 2, 1},
+			want:     5,
+		},
+		{
 			name:     "normal 50",
 			quantile: 0.5,
-			data:     NormalData,
+			digest:   NormalDigest,
 			want:     9.997821231634168,
 		},
 		{
 			name:     "normal 90",
 			quantile: 0.9,
-			data:     NormalData,
+			digest:   NormalDigest,
 			want:     13.843815760607427,
 		},
 		{
 			name:     "uniform 50",
 			quantile: 0.5,
-			data:     UniformData,
+			digest:   UniformDigest,
 			want:     50.02682856274754,
 		},
 		{
 			name:     "uniform 90",
 			quantile: 0.9,
-			data:     UniformData,
+			digest:   UniformDigest,
 			want:     90.02117754660424,
+		},
+		{
+			name:     "uniform 99",
+			quantile: 0.99,
+			digest:   UniformDigest,
+			want:     99.00246731511771,
+		},
+		{
+			name:     "uniform 99.9",
+			quantile: 0.999,
+			digest:   UniformDigest,
+			want:     99.90178495422307,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			td := tdigest.NewWithCompression(1000)
-			for _, x := range tt.data {
-				td.Add(x, 1)
+			td := tt.digest
+			if td == nil {
+				td = tdigest.NewWithCompression(1000)
+				for _, x := range tt.data {
+					td.Add(x, 1)
+				}
 			}
 			got := td.Quantile(tt.quantile)
 			if got != tt.want {
-				t.Errorf("unexprected quantile %f, got %g want %g", tt.quantile, got, tt.want)
+				t.Errorf("unexpected quantile %f, got %g want %g", tt.quantile, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTdigest_CDFs(t *testing.T) {
+	tests := []struct {
+		name   string
+		data   []float64
+		digest *tdigest.TDigest
+		cdf    float64
+		want   float64
+	}{
+		{
+			name: "increasing",
+			cdf:  3,
+			data: []float64{1, 2, 3, 4, 5},
+			want: 0.5,
+		},
+		{
+			name: "small",
+			cdf:  4,
+			data: []float64{1, 2, 3, 4, 5, 5, 4, 3, 2, 1},
+			want: 0.75,
+		},
+		{
+			name: "small max",
+			cdf:  5,
+			data: []float64{1, 2, 3, 4, 5, 5, 4, 3, 2, 1},
+			want: 1,
+		},
+		{
+			name: "normal mean",
+			cdf:  10,
+			data: NormalData,
+			want: 0.500298235578106,
+		},
+		{
+			name: "normal high",
+			cdf:  -100,
+			data: NormalData,
+			want: 0,
+		},
+		{
+			name: "normal low",
+			cdf:  110,
+			data: NormalData,
+			want: 1,
+		},
+		{
+			name: "uniform 50",
+			cdf:  50,
+			data: UniformData,
+			want: 0.49972989818712815,
+		},
+		{
+			name: "uniform min",
+			cdf:  0,
+			data: UniformData,
+			want: 0,
+		},
+		{
+			name: "uniform max",
+			cdf:  100,
+			data: UniformData,
+			want: 1,
+		},
+		{
+			name: "uniform 10",
+			cdf:  10,
+			data: UniformData,
+			want: 0.099715527526992,
+		},
+		{
+			name: "uniform 90",
+			cdf:  90,
+			data: UniformData,
+			want: 0.8997838903965611,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			td := tt.digest
+			if td == nil {
+				td = tdigest.NewWithCompression(1000)
+				for _, x := range tt.data {
+					td.Add(x, 1)
+				}
+			}
+			got := td.CDF(tt.cdf)
+			if got != tt.want {
+				t.Errorf("unexpected CDF %f, got %g want %g", tt.cdf, got, tt.want)
 			}
 		})
 	}

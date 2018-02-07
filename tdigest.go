@@ -190,12 +190,7 @@ func (t *TDigest) CDF(x float64) float64 {
 	})
 
 	z1 := x - t.processed[upper-1].Mean
-	var z2 float64
-	if upper == t.processed.Len() {
-		z2 = z1
-	} else {
-		z2 = t.processed[upper].Mean - x
-	}
+	z2 := t.processed[upper].Mean - x
 	return weightedAverage(t.cumulative[upper-1], z2, t.cumulative[upper], z1) / t.processedWeight
 }
 

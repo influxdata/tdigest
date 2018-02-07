@@ -16,18 +16,22 @@ var dataFiles = []string{
 }
 
 const (
-	cppExt = ".cpp.quantiles"
-	goExt  = ".go.quantiles"
+	cppQExt = ".cpp.quantiles"
+	goQExt  = ".go.quantiles"
+
+	cppCDFExt = ".cpp.cdfs"
+	goCDFExt  = ".go.cdfs"
 
 	epsilon = 1e-6
 )
 
 func main() {
 	for _, f := range dataFiles {
-		cppQuantiles := loadQuantiles(f + cppExt)
-		goQuantiles := loadQuantiles(f + goExt)
+		// Validate Quantiles
+		cppQuantiles := loadResults(f + cppQExt)
+		goQuantiles := loadResults(f + goQExt)
 		if len(cppQuantiles) != len(goQuantiles) {
-			log.Fatal("differing number of quantiles")
+			log.Fatal("differing number of quantiles results")
 		}
 
 		for i := range cppQuantiles {
@@ -35,9 +39,23 @@ func main() {
 				log.Fatalf("differing quantile result go: %f cpp: %f", goQuantiles[i], cppQuantiles[i])
 			}
 		}
+
+		// Validate CDFs
+		cppCDFs := loadResults(f + cppCDFExt)
+		goCDFs := loadResults(f + goCDFExt)
+		if len(cppCDFs) != len(goCDFs) {
+			log.Fatal("differing number of CDFs results")
+		}
+
+		for i := range cppCDFs {
+			if math.Abs(cppCDFs[i]-goCDFs[i]) > epsilon {
+				log.Fatalf("differing CDF result go: %f cpp: %f", goCDFs[i], cppCDFs[i])
+			}
+		}
 	}
 }
-func loadQuantiles(name string) []float64 {
+
+func loadResults(name string) []float64 {
 	f, err := os.Open(name)
 	if err != nil {
 		panic(err)

@@ -1,7 +1,6 @@
 package tdigest
 
 import (
-	"container/heap"
 	"math"
 	"sort"
 )
@@ -20,32 +19,34 @@ type TDigest struct {
 	max               float64
 }
 
-func NewTDigest() *TDigest {
+func New() *TDigest {
+	return NewWithCompression(1000)
+}
+func NewWithCompression(c float64) *TDigest {
 	t := &TDigest{
-		Compression: 1000,
+		Compression: c,
 	}
 	t.maxProcessed = processedSize(0, t.Compression)
-	t.maxUnprocessed = processedSize(0, t.Compression)
+	t.maxUnprocessed = unprocessedSize(0, t.Compression)
 	t.processed.Centroids = make([]*Centroid, 0, t.maxProcessed)
 	t.unprocessed.Centroids = make([]*Centroid, 0, t.maxUnprocessed+1)
-	t.max = math.MaxFloat64
-	t.min = -math.MaxFloat64
+	t.min = math.MaxFloat64
+	t.max = -math.MaxFloat64
 	return t
 }
 
-/*
-func (t *TDigest) Add(t *TDigest) error {
-	// Heap this together with adds
-	// there is some work around dealing with high water
-	// updateCumulative as well
-	return nil
+func (t *TDigest) Add(x, w float64) {
+	if math.IsNaN(x) {
+		return
+	}
+	t.AddCentroid(&Centroid{Mean: x, Weight: w})
 }
-*/
 
 func (t *TDigest) AddCentroidList(c *CentroidList) {
-	for i := range c.Centroids {
-		diff := len(c.Centroids) - i
-		room := t.maxUnprocessed - len(t.unprocessed.Centroids)
+	l := c.Len()
+	for i := 0; i < l; i++ {
+		diff := l - i
+		room := t.maxUnprocessed - t.unprocessed.Len()
 		mid := i + diff
 		if room < diff {
 			mid = i + room
@@ -58,87 +59,92 @@ func (t *TDigest) AddCentroidList(c *CentroidList) {
 }
 
 func (t *TDigest) AddCentroid(c *Centroid) {
-	heap.Push(&t.unprocessed, c)
+	t.unprocessed.Centroids = append(t.unprocessed.Centroids, c)
 	t.unprocessedWeight += c.Weight
 
-	if len(t.processed.Centroids) > t.maxProcessed ||
-		len(t.unprocessed.Centroids) > t.maxUnprocessed {
+	if t.processed.Len() > t.maxProcessed ||
+		t.unprocessed.Len() > t.maxUnprocessed {
 		t.process()
 	}
 }
 
 func (t *TDigest) process() {
-	if len(t.unprocessed.Centroids) > 0 ||
-		len(t.processed.Centroids) > t.maxProcessed {
-		for i := range t.processed.Centroids {
-			// I'm thinking that we should sort at the end
-			// Right now this is O(N log N)
-			heap.Push(&t.unprocessed, t.processed.Centroids[i])
-		}
+	if t.unprocessed.Len() > 0 ||
+		t.processed.Len() > t.maxProcessed {
+
+		// Append all processed centroids to the unprocessed list and sort
+		t.unprocessed.Centroids = append(t.unprocessed.Centroids, t.processed.Centroids...)
+		sort.Sort(&t.unprocessed)
+
+		// Reset processed list with first centroid
+		t.processed.Clear()
+		t.processed.Centroids = append(t.processed.Centroids, t.unprocessed.Centroids[0])
+
 		t.processedWeight += t.unprocessedWeight
 		t.unprocessedWeight = 0
-		t.processed.Centroids = t.unprocessed.Centroids[:1]
-		soFar := t.unprocessed.Centroids[0].Weight
+		soFar := t.unprocessed.WeightAt(0)
 		limit := t.processedWeight * t.integratedQ(1.0)
-		for i := range t.unprocessed.Centroids {
-			projected := soFar + t.unprocessed.Centroids[i].Weight
+		for _, centroid := range t.unprocessed.Centroids[1:] {
+			projected := soFar + centroid.Weight
 			if projected <= limit {
 				soFar = projected
-				heap.Push(&t.processed, t.unprocessed.Centroids[i])
+				t.processed.Centroids[t.processed.Len()-1].Add(centroid)
 			} else {
 				k1 := t.integratedLocation(soFar / t.processedWeight)
 				limit = t.processedWeight * t.integratedQ(k1+1.0)
-				soFar = projected
-				heap.Push(&t.processed, t.unprocessed.Centroids[i])
+				soFar += centroid.Weight
+				t.processed.Centroids = append(t.processed.Centroids, centroid)
 			}
 		}
-		// TODO: clear t.unprocessed
-		t.min = math.Min(t.min, t.processed.Centroids[0].Mean)
-		t.max = math.Max(t.max, t.processed.Centroids[len(t.processed.Centroids)-1].Mean)
+		t.min = math.Min(t.min, t.processed.MeanAt(0))
+		t.max = math.Max(t.max, t.processed.MeanAt(t.processed.Len()-1))
 		t.updateCumulative()
+		t.unprocessed.Clear()
 	}
 }
 
 func (t *TDigest) updateCumulative() {
-	t.cumulative = make([]float64, 0, len(t.processed.Centroids)+1)
+	t.cumulative = make([]float64, t.processed.Len()+1)
 	prev := 0.0
-	for i := range t.processed.Centroids {
-		cur := t.processed.Centroids[i].Weight
-		t.cumulative = append(t.cumulative, prev+cur/2.0)
+	for i, centroid := range t.processed.Centroids {
+		cur := centroid.Weight
+		t.cumulative[i] = prev + cur/2.0
 		prev = prev + cur
 	}
-	t.cumulative[len(t.cumulative)-1] = prev
+	t.cumulative[t.processed.Len()] = prev
 }
 
 func (t *TDigest) Quantile(q float64) float64 {
 	t.process()
-	if q < 0 || q > 1 || len(t.processed.Centroids) == 0 {
+	if q < 0 || q > 1 || t.processed.Len() == 0 {
 		return math.NaN()
 	}
-	if len(t.processed.Centroids) == 1 {
-		return 0.0
+	if t.processed.Len() == 1 {
+		return t.processed.MeanAt(0)
 	}
-	n := len(t.processed.Centroids)
 	index := q * t.processedWeight
-	if index < t.processed.Centroids[0].Weight/2.0 {
-		return t.min + 2.0*index/t.processed.Centroids[0].Weight*(t.processed.Centroids[0].Mean-t.min)
+	if index < t.processed.WeightAt(0)/2.0 {
+		return t.min + 2.0*index/t.processed.WeightAt(0)*(t.processed.MeanAt(0)-t.min)
 	}
 
 	lower := sort.Search(len(t.cumulative), func(i int) bool {
-		return t.cumulative[i] < index
+		return t.cumulative[i] >= index
 	})
 
-	z1 := index - t.cumulative[lower-1]
-	z2 := z1
-	if lower != len(t.cumulative) {
-		z2 = t.cumulative[lower] - index
+	if lower+1 != len(t.cumulative) {
+		z1 := index - t.cumulative[lower-1]
+		z2 := t.cumulative[lower] - index
+		return weightedAverage(t.processed.MeanAt(lower-1), z2, t.processed.MeanAt(lower), z1)
 	}
-	return weightedAverage(t.processed.Centroids[n-1].Mean, z1, t.max, z2)
+
+	z1 := index - t.processedWeight - t.processed.WeightAt(lower-1)/2.0
+	z2 := (t.processed.WeightAt(lower-1) / 2.0) - z1
+	return weightedAverage(t.processed.MeanAt(t.processed.Len()-1), z1, t.max, z2)
 }
 
 func (t *TDigest) CDF(x float64) float64 {
 	t.process()
-	switch len(t.processed.Centroids) {
+	switch t.processed.Len() {
 	case 0:
 		return 0.0
 	case 1:
@@ -162,33 +168,33 @@ func (t *TDigest) CDF(x float64) float64 {
 	if x >= t.max {
 		return 1.0
 	}
-	m0 := t.processed.Centroids[0].Mean
+	m0 := t.processed.MeanAt(0)
 	// Left Tail
 	if x <= m0 {
 		if m0-t.min > 0 {
-			return (x - t.min) / (m0 - t.min) * t.processed.Centroids[0].Weight / t.processedWeight / 2.0
+			return (x - t.min) / (m0 - t.min) * t.processed.WeightAt(0) / t.processedWeight / 2.0
 		}
 		return 0.0
 	}
 	// Right Tail
-	mn := t.processed.Centroids[len(t.processed.Centroids)-1].Mean
+	mn := t.processed.MeanAt(t.processed.Len() - 1)
 	if x >= mn {
 		if t.max-mn > 0.0 {
-			return 1.0 - (t.max-x)/(t.max-mn)*t.processed.Centroids[len(t.processed.Centroids)-1].Weight/t.processedWeight/2.0
+			return 1.0 - (t.max-x)/(t.max-mn)*t.processed.WeightAt(t.processed.Len()-1)/t.processedWeight/2.0
 		}
 		return 1.0
 	}
 
-	upper := sort.Search(len(t.processed.Centroids), func(i int) bool {
-		return t.processed.Centroids[i].Mean > x
+	upper := sort.Search(t.processed.Len(), func(i int) bool {
+		return t.processed.MeanAt(i) > x
 	})
 
-	z1 := x - t.processed.Centroids[upper-1].Mean
+	z1 := x - t.processed.MeanAt(upper-1)
 	var z2 float64
-	if upper == len(t.processed.Centroids) {
+	if upper == t.processed.Len() {
 		z2 = z1
 	} else {
-		z2 = t.processed.Centroids[upper].Mean - x
+		z2 = t.processed.MeanAt(upper) - x
 	}
 	return weightedAverage(t.cumulative[upper-1], z2, t.cumulative[upper], z1) / t.processedWeight
 }

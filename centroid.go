@@ -1,6 +1,9 @@
 package tdigest
 
-import "container/heap"
+import (
+	"fmt"
+	"sort"
+)
 
 // ErrWeightLessThanZero is used when the weight is not able to be processed.
 const ErrWeightLessThanZero = Error("centroid weight cannot be less than zero")
@@ -19,6 +22,10 @@ type Centroid struct {
 	index  int
 }
 
+func (c *Centroid) String() string {
+	return fmt.Sprintf("{mean: %f weight: %f}", c.Mean, c.Weight)
+}
+
 // Add averages the two centroids together and update this centroid
 func (c *Centroid) Add(r *Centroid) error {
 	if r.Weight < 0 {
@@ -26,7 +33,7 @@ func (c *Centroid) Add(r *Centroid) error {
 	}
 	if c.Weight != 0 {
 		c.Weight += r.Weight
-		c.Mean = r.Weight * (r.Mean - c.Mean) / c.Weight
+		c.Mean += r.Weight * (r.Mean - c.Mean) / c.Weight
 	} else {
 		c.Weight = r.Weight
 		c.Mean = r.Mean
@@ -47,11 +54,21 @@ func (l *CentroidList) Weight() (w float64) {
 	}
 	return w
 }
+func (l *CentroidList) WeightAt(i int) float64 {
+	return l.Centroids[i].Weight
+}
+func (l *CentroidList) MeanAt(i int) float64 {
+	return l.Centroids[i].Mean
+}
+
+func (l *CentroidList) Clear() {
+	l.Centroids = l.Centroids[0:0]
+}
 
 func (l *CentroidList) Len() int { return len(l.Centroids) }
 
 func (l *CentroidList) Less(i, j int) bool {
-	return l.Centroids[i].Mean > l.Centroids[j].Mean
+	return l.Centroids[i].Mean < l.Centroids[j].Mean
 }
 
 func (l *CentroidList) Swap(i, j int) {
@@ -78,18 +95,11 @@ func (l *CentroidList) Pop() interface{} {
 	return item
 }
 
-// Update changes the mean and weights of a centroid and reprioritizes the priority queue
-func (l *CentroidList) Update(c *Centroid, mean, weight float64) {
-	c.Mean = mean
-	c.Weight = weight
-	heap.Fix(l, c.index)
-}
-
 // NewCentroidList creates a priority queue for the centroids
 func NewCentroidList(centroids []*Centroid) *CentroidList {
 	l := &CentroidList{
 		Centroids: centroids,
 	}
-	heap.Init(l)
+	sort.Sort(l)
 	return l
 }

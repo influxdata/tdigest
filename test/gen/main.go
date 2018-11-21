@@ -1,11 +1,11 @@
 package main
 
 import (
-	"math/rand"
 	"os"
 	"strconv"
 
-	"github.com/gonum/stat/distuv"
+	"golang.org/x/exp/rand"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 const (
@@ -20,9 +20,9 @@ func main() {
 	// Generate uniform and normal data
 	uniform := rand.New(rand.NewSource(seed))
 	dist := distuv.Normal{
-		Mu:     Mu,
-		Sigma:  Sigma,
-		Source: rand.New(rand.NewSource(seed)),
+		Mu:    Mu,
+		Sigma: Sigma,
+		Src:   rand.New(rand.NewSource(seed)),
 	}
 
 	uniformData := make([]float64, N)

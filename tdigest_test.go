@@ -1,11 +1,11 @@
 package tdigest_test
 
 import (
-	"math/rand"
 	"testing"
 
-	"github.com/gonum/stat/distuv"
 	"github.com/influxdata/tdigest"
+	"golang.org/x/exp/rand"
+	"gonum.org/v1/gonum/stat/distuv"
 )
 
 const (
@@ -25,9 +25,9 @@ var UniformDigest *tdigest.TDigest
 
 func init() {
 	dist := distuv.Normal{
-		Mu:     Mu,
-		Sigma:  Sigma,
-		Source: rand.New(rand.NewSource(seed)),
+		Mu:    Mu,
+		Sigma: Sigma,
+		Src:   rand.New(rand.NewSource(seed)),
 	}
 	uniform := rand.New(rand.NewSource(seed))
 
@@ -82,37 +82,37 @@ func TestTdigest_Quantile(t *testing.T) {
 			name:     "normal 50",
 			quantile: 0.5,
 			digest:   NormalDigest,
-			want:     9.997821231634168,
+			want:     10.000673533707138,
 		},
 		{
 			name:     "normal 90",
 			quantile: 0.9,
 			digest:   NormalDigest,
-			want:     13.843815760607427,
+			want:     13.842132136909889,
 		},
 		{
 			name:     "uniform 50",
 			quantile: 0.5,
 			digest:   UniformDigest,
-			want:     50.02682856274754,
+			want:     49.992502345843555,
 		},
 		{
 			name:     "uniform 90",
 			quantile: 0.9,
 			digest:   UniformDigest,
-			want:     90.02117754660424,
+			want:     89.98281777095822,
 		},
 		{
 			name:     "uniform 99",
 			quantile: 0.99,
 			digest:   UniformDigest,
-			want:     99.00246731511771,
+			want:     98.98503400959562,
 		},
 		{
 			name:     "uniform 99.9",
 			quantile: 0.999,
 			digest:   UniformDigest,
-			want:     99.90178495422307,
+			want:     99.90103781043621,
 		},
 	}
 	for _, tt := range tests {
@@ -162,7 +162,7 @@ func TestTdigest_CDFs(t *testing.T) {
 			name: "normal mean",
 			cdf:  10,
 			data: NormalData,
-			want: 0.500298235578106,
+			want: 0.4999156505250766,
 		},
 		{
 			name: "normal high",
@@ -180,7 +180,7 @@ func TestTdigest_CDFs(t *testing.T) {
 			name: "uniform 50",
 			cdf:  50,
 			data: UniformData,
-			want: 0.49972989818712815,
+			want: 0.5000756133965755,
 		},
 		{
 			name: "uniform min",
@@ -198,13 +198,13 @@ func TestTdigest_CDFs(t *testing.T) {
 			name: "uniform 10",
 			cdf:  10,
 			data: UniformData,
-			want: 0.099715527526992,
+			want: 0.09987932577650871,
 		},
 		{
 			name: "uniform 90",
 			cdf:  90,
 			data: UniformData,
-			want: 0.8997838903965611,
+			want: 0.9001667885256108,
 		},
 	}
 	for _, tt := range tests {

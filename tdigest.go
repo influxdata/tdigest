@@ -17,19 +17,31 @@ type TDigest struct {
 	unprocessedWeight float64
 	min               float64
 	max               float64
+	count             int64
+	decayCount        int32
+	decayEvery        int32
+	decayValue        float64
 }
 
 func New() *TDigest {
 	return NewWithCompression(1000)
 }
+
 func NewWithCompression(c float64) *TDigest {
+	return NewWithDecay(c, 0, 0)
+}
+
+func NewWithDecay(compression, decayValue float64, decayEvery int32) *TDigest {
 	t := &TDigest{
-		Compression: c,
+		Compression: compression,
+		decayValue:  decayValue,
+		decayEvery:  decayEvery,
 	}
 	t.maxProcessed = processedSize(0, t.Compression)
 	t.maxUnprocessed = unprocessedSize(0, t.Compression)
 	t.processed = make([]Centroid, 0, t.maxProcessed)
 	t.unprocessed = make([]Centroid, 0, t.maxUnprocessed+1)
+	t.cumulative = make([]float64, 0, t.maxProcessed+1)
 	t.min = math.MaxFloat64
 	t.max = -math.MaxFloat64
 	return t
@@ -40,6 +52,19 @@ func (t *TDigest) Add(x, w float64) {
 		return
 	}
 	t.AddCentroid(Centroid{Mean: x, Weight: w})
+
+	t.handleDecay()
+}
+
+func (t *TDigest) handleDecay() {
+	t.count++
+	if t.decayValue > 0 {
+		t.decayCount++
+		if t.decayCount >= t.decayEvery {
+			t.decay()
+			t.decayCount = 0
+		}
+	}
 }
 
 func (t *TDigest) AddCentroidList(c CentroidList) {
@@ -104,14 +129,14 @@ func (t *TDigest) process() {
 }
 
 func (t *TDigest) updateCumulative() {
-	t.cumulative = make([]float64, t.processed.Len()+1)
+	t.cumulative = t.cumulative[:0]
 	prev := 0.0
-	for i, centroid := range t.processed {
+	for _, centroid := range t.processed {
 		cur := centroid.Weight
-		t.cumulative[i] = prev + cur/2.0
+		t.cumulative = append(t.cumulative, prev+cur/2.0)
 		prev = prev + cur
 	}
-	t.cumulative[t.processed.Len()] = prev
+	t.cumulative = append(t.cumulative, prev)
 }
 
 func (t *TDigest) Quantile(q float64) float64 {
@@ -226,4 +251,99 @@ func unprocessedSize(size int, compression float64) int {
 		return int(8 * math.Ceil(compression))
 	}
 	return size
+}
+
+// decayLimit is 0.9**100, maybe configurable?
+const decayLimit = 0.00002656139889
+
+// decay decays the histo to make values at the top less interesting over time
+// the total digest count will converge to `bufferSize / (1 - decayFactor)`
+// if we use `decayFactor` 0.9 and `bufferSize` 1000, this means total count 10000
+// so 99th percentile will not be overly influenced by a few bad values
+// and similarly the ranking/selection will not be
+// (provided we use scale function which keeps small enough bins towards the top)
+func (t *TDigest) decay() {
+	t.process()
+	var weight float64
+	var remove []int
+	for i := range t.processed {
+		c := &t.processed[i]
+		c.Weight = c.Weight * t.decayValue
+		if c.Weight < decayLimit {
+			remove = append(remove, i)
+		} else {
+			weight += c.Weight
+		}
+	}
+	if len(remove) > 0 {
+		for i, c := range remove {
+			calculated := c - i
+			t.processed = append(t.processed[:calculated], t.processed[calculated+1:]...)
+		}
+		if len(t.processed) > 0 {
+			t.max = t.processed[len(t.processed)-1].Mean
+			t.min = t.processed[0].Mean
+		} else {
+			t.min = math.Inf(+1)
+			t.max = math.Inf(-1)
+		}
+	}
+
+	t.processedWeight = weight
+}
+
+func (t *TDigest) Clone() *TDigest {
+	t.process()
+	td := &TDigest{
+		Compression:       t.Compression,
+		maxProcessed:      t.maxProcessed,
+		maxUnprocessed:    t.maxUnprocessed,
+		processed:         make(CentroidList, 0, t.maxProcessed),
+		unprocessed:       make(CentroidList, 0, t.maxUnprocessed+1),
+		cumulative:        make([]float64, 0, t.maxUnprocessed+1),
+		processedWeight:   t.processedWeight,
+		unprocessedWeight: t.unprocessedWeight,
+		min:               t.min,
+		max:               t.max,
+		count:             t.count,
+		decayCount:        t.decayCount,
+		decayEvery:        t.decayEvery,
+		decayValue:        t.decayValue,
+	}
+
+	for _, c := range t.processed {
+		td.processed = append(td.processed, c)
+	}
+
+	for _, c := range t.cumulative {
+		td.cumulative = append(td.cumulative, c)
+	}
+	// we've processed so unprocessed will be empty
+
+	return td
+}
+
+// MarshalBinary serializes d as a sequence of bytes, suitable to be
+// deserialized later with UnmarshalBinary.
+func (t *TDigest) MarshalBinary() ([]byte, error) {
+	t.process()
+	return marshalBinary(t)
+}
+
+// UnmarshalBinary populates d with the parsed contents of p, which should have
+// been created with a call to MarshalBinary.
+func (t *TDigest) UnmarshalBinary(p []byte) error {
+	return unmarshalBinary(t, p)
+}
+
+func (t *TDigest) Count() int64 {
+	return t.count
+}
+
+func (t *TDigest) Min() float64 {
+	return t.min
+}
+
+func (t *TDigest) Max() float64 {
+	return t.max
 }

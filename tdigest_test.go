@@ -1,11 +1,12 @@
-package tdigest_test
+package tdigest
 
 import (
 	"testing"
 
-	"github.com/influxdata/tdigest"
 	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/stat/distuv"
+	"reflect"
+	"time"
 )
 
 const (
@@ -20,8 +21,8 @@ const (
 var NormalData []float64
 var UniformData []float64
 
-var NormalDigest *tdigest.TDigest
-var UniformDigest *tdigest.TDigest
+var NormalDigest *TDigest
+var UniformDigest *TDigest
 
 func init() {
 	dist := distuv.Normal{
@@ -32,10 +33,10 @@ func init() {
 	uniform := rand.New(rand.NewSource(seed))
 
 	UniformData = make([]float64, N)
-	UniformDigest = tdigest.NewWithCompression(1000)
+	UniformDigest = NewWithCompression(1000)
 
 	NormalData = make([]float64, N)
-	NormalDigest = tdigest.NewWithCompression(1000)
+	NormalDigest = NewWithCompression(1000)
 
 	for i := range NormalData {
 		NormalData[i] = dist.Rand()
@@ -50,7 +51,7 @@ func TestTdigest_Quantile(t *testing.T) {
 	tests := []struct {
 		name     string
 		data     []float64
-		digest   *tdigest.TDigest
+		digest   *TDigest
 		quantile float64
 		want     float64
 	}{
@@ -119,7 +120,7 @@ func TestTdigest_Quantile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			td := tt.digest
 			if td == nil {
-				td = tdigest.NewWithCompression(1000)
+				td = NewWithCompression(1000)
 				for _, x := range tt.data {
 					td.Add(x, 1)
 				}
@@ -132,11 +133,41 @@ func TestTdigest_Quantile(t *testing.T) {
 	}
 }
 
+func TestClone(t *testing.T) {
+	testcase := func(in *TDigest) func(*testing.T) {
+		return func(t *testing.T) {
+			b, err := in.MarshalBinary()
+			if err != nil {
+				t.Fatalf("MarshalBinary err: %v", err)
+			}
+			out := new(TDigest)
+			err = out.UnmarshalBinary(b)
+			if err != nil {
+				t.Fatalf("UnmarshalBinary err: %v", err)
+			}
+			if !reflect.DeepEqual(in, out) {
+				t.Errorf("marshaling round trip resulted in changes")
+				t.Logf("in: %+v", in)
+				t.Logf("out: %+v", out)
+			}
+		}
+	}
+	t.Run("empty", testcase(New()))
+	t.Run("1 value", testcase(simpleTDigest(1)))
+	t.Run("1000 values", testcase(simpleTDigest(1000)))
+
+	d := New()
+	d.Add(1, 1)
+	d.Add(1, 1)
+	d.Add(0, 1)
+	t.Run("1, 1, 0 input", testcase(d))
+}
+
 func TestTdigest_CDFs(t *testing.T) {
 	tests := []struct {
 		name   string
 		data   []float64
-		digest *tdigest.TDigest
+		digest *TDigest
 		cdf    float64
 		want   float64
 	}{
@@ -211,7 +242,7 @@ func TestTdigest_CDFs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			td := tt.digest
 			if td == nil {
-				td = tdigest.NewWithCompression(1000)
+				td = NewWithCompression(1000)
 				for _, x := range tt.data {
 					td.Add(x, 1)
 				}
@@ -224,26 +255,65 @@ func TestTdigest_CDFs(t *testing.T) {
 	}
 }
 
+func TestCloneRoundTrip(t *testing.T) {
+	testcase := func(in *TDigest) func(*testing.T) {
+		return func(t *testing.T) {
+
+			out := in.Clone()
+			if !reflect.DeepEqual(in, out) {
+				t.Errorf("marshaling round trip resulted in changes")
+				t.Logf("inn: %+v", in)
+				t.Logf("out: %+v", out)
+			}
+		}
+	}
+	t.Run("empty", testcase(New()))
+	t.Run("1 value", testcase(simpleTDigest(1)))
+	t.Run("1000 values", testcase(simpleTDigest(1000)))
+
+	d := New()
+	d.Add(1, 1)
+	d.Add(1, 1)
+	d.Add(0, 1)
+	t.Run("1, 1, 0 input", testcase(d))
+}
+
+
 var quantiles = []float64{0.1, 0.5, 0.9, 0.99, 0.999}
 
-func BenchmarkTDigest_Add(b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		td := tdigest.NewWithCompression(1000)
-		for _, x := range NormalData {
-			td.Add(x, 1)
-		}
+func BenchmarkAdd(b *testing.B) {
+	rand.Seed(uint64(time.Now().Unix()))
+	td := NewWithDecay(500, 0.9, 1000)
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		td.Add(rand.NormFloat64(), 1.0)
 	}
 }
-func BenchmarkTDigest_Quantile(b *testing.B) {
-	td := tdigest.NewWithCompression(1000)
-	for _, x := range NormalData {
-		td.Add(x, 1)
+
+func BenchmarkQuantile(b *testing.B) {
+	rand.Seed(uint64(time.Now().Unix()))
+	td := NewWithCompression(500)
+	for i := 0; i < b.N; i++ {
+		td.Add(rand.NormFloat64(), 1.0)
 	}
 	b.ResetTimer()
-	var x float64
-	for n := 0; n < b.N; n++ {
-		for _, q := range quantiles {
-			x += td.Quantile(q)
-		}
+
+	for i := 0; i < b.N; i++ {
+		td.Quantile(rand.Float64())
+	}
+}
+
+func BenchmarkCDF(b *testing.B) {
+	rand.Seed(uint64(time.Now().Unix()))
+	td := NewWithCompression(500)
+	for i := 0; i < b.N; i++ {
+		td.Add(rand.NormFloat64(), 1.0)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		td.CDF(rand.Float64())
 	}
 }

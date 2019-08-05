@@ -3,6 +3,7 @@
 This is an implementation of Ted Dunning's [t-digest](https://github.com/tdunning/t-digest/) in Go.
 
 The implementation is based off [Derrick Burns' C++ implementation](https://github.com/derrickburns/tdigest).
+The implementation has borrowed some from [Derrick Burns' C++ implementation](https://github.com/spenczar/tdigest).
 
 ## Example
 
@@ -12,7 +13,7 @@ package main
 import (
 	"log"
 
-	"github.com/influxdata/tdigest"
+	"github.com/mdubbyap/tdigest"
 )
 
 func main() {

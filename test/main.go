@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/influxdata/tdigest"
+	"github.com/mdubbyap/tdigest"
 )
 
 var quantiles = []float64{
@@ -19,9 +19,9 @@ var quantiles = []float64{
 }
 
 var cdfs = map[string][]float64{
-	"small.dat":   []float64{0, 1, 4, 5, 6},
-	"uniform.dat": []float64{-1, 0, 50, 100, 101},
-	"normal.dat":  []float64{-100, 7, 10, 13, 110},
+	"small.dat":   {0, 1, 4, 5, 6},
+	"uniform.dat": {-1, 0, 50, 100, 101},
+	"normal.dat":  {-100, 7, 10, 13, 110},
 }
 
 var dataFiles = []string{

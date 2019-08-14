@@ -5,6 +5,7 @@ import (
 
 	"golang.org/x/exp/rand"
 	"gonum.org/v1/gonum/stat/distuv"
+	"math"
 	"reflect"
 	"time"
 )
@@ -278,42 +279,77 @@ func TestCloneRoundTrip(t *testing.T) {
 	t.Run("1, 1, 0 input", testcase(d))
 }
 
-
-var quantiles = []float64{0.1, 0.5, 0.9, 0.99, 0.999}
+var (
+	quantiles            = []float64{0.1, 0.5, 0.9, 0.99, 0.999}
+	benchmarkCompression = float64(500)
+	benchmarkDecayValue  = 0.9
+	benchmarkDecayEvery  = int32(1000)
+)
 
 func BenchmarkAdd(b *testing.B) {
 	rand.Seed(uint64(time.Now().Unix()))
-	td := NewWithDecay(500, 0.9, 1000)
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		td.Add(rand.NormFloat64(), 1.0)
+	benchmarks := []struct {
+		name  string
+		scale scaler
+	}{
+		{name: "k1", scale: &K1{}},
+	}
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			td := NewWithDecay(benchmarkCompression, benchmarkDecayValue, benchmarkDecayEvery)
+			b.ResetTimer()
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				td.Add(math.Abs(rand.NormFloat64()), 1.0)
+			}
+		})
 	}
 }
 
 func BenchmarkQuantile(b *testing.B) {
 	rand.Seed(uint64(time.Now().Unix()))
-	td := NewWithCompression(500)
-	for i := 0; i < b.N; i++ {
-		td.Add(rand.NormFloat64(), 1.0)
+	benchmarks := []struct {
+		name  string
+		scale scaler
+	}{
+		{name: "k1", scale: &K1{}},
 	}
-	b.ResetTimer()
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			td := NewWithDecay(benchmarkCompression, benchmarkDecayValue, benchmarkDecayEvery)
+			for i := 0; i < b.N; i++ {
+				td.Add(math.Abs(rand.NormFloat64()), 1.0)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		td.Quantile(rand.Float64())
+			for i := 0; i < b.N; i++ {
+				td.Quantile(rand.Float64())
+			}
+		})
 	}
 }
 
 func BenchmarkCDF(b *testing.B) {
 	rand.Seed(uint64(time.Now().Unix()))
-	td := NewWithCompression(500)
-	for i := 0; i < b.N; i++ {
-		td.Add(rand.NormFloat64(), 1.0)
+	benchmarks := []struct {
+		name  string
+		scale scaler
+	}{
+		{name: "k1", scale: &K1{}},
 	}
-	b.ResetTimer()
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			td := NewWithDecay(benchmarkCompression, benchmarkDecayValue, benchmarkDecayEvery)
+			for i := 0; i < b.N; i++ {
+				td.Add(math.Abs(rand.NormFloat64()), 1.0)
+			}
+			b.ResetTimer()
+			b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
-		td.CDF(rand.Float64())
+			for i := 0; i < b.N; i++ {
+				td.CDF(math.Abs(rand.NormFloat64()))
+			}
+		})
 	}
 }

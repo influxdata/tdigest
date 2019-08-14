@@ -6,6 +6,7 @@ import (
 )
 
 type TDigest struct {
+	Scaler      scaler
 	Compression float64
 
 	maxProcessed      int
@@ -34,6 +35,7 @@ func NewWithCompression(c float64) *TDigest {
 func NewWithDecay(compression, decayValue float64, decayEvery int32) *TDigest {
 	t := &TDigest{
 		Compression: compression,
+		Scaler:      &K1{},
 		decayValue:  decayValue,
 		decayEvery:  decayEvery,
 	}
@@ -94,6 +96,10 @@ func (t *TDigest) AddCentroid(c Centroid) {
 }
 
 func (t *TDigest) process() {
+	t.processIt(true)
+}
+
+func (t *TDigest) processIt(updateCumulative bool) {
 	if t.unprocessed.Len() > 0 ||
 		t.processed.Len() > t.maxProcessed {
 
@@ -108,22 +114,24 @@ func (t *TDigest) process() {
 		t.processedWeight += t.unprocessedWeight
 		t.unprocessedWeight = 0
 		soFar := t.unprocessed[0].Weight
-		limit := t.processedWeight * t.integratedQ(1.0)
+		limit := t.processedWeight * t.Scaler.integratedQ(1.0, t.Compression)
 		for _, centroid := range t.unprocessed[1:] {
 			projected := soFar + centroid.Weight
 			if projected <= limit {
 				soFar = projected
 				(&t.processed[t.processed.Len()-1]).Add(centroid)
 			} else {
-				k1 := t.integratedLocation(soFar / t.processedWeight)
-				limit = t.processedWeight * t.integratedQ(k1+1.0)
+				k1 := t.Scaler.integratedLocation(soFar/t.processedWeight, t.Compression)
+				limit = t.processedWeight * t.Scaler.integratedQ(k1+1.0, t.Compression)
 				soFar += centroid.Weight
 				t.processed = append(t.processed, centroid)
 			}
 		}
 		t.min = math.Min(t.min, t.processed[0].Mean)
 		t.max = math.Max(t.max, t.processed[t.processed.Len()-1].Mean)
-		t.updateCumulative()
+		if updateCumulative {
+			t.updateCumulative()
+		}
 		t.unprocessed.Clear()
 	}
 }
@@ -219,12 +227,19 @@ func (t *TDigest) CDF(x float64) float64 {
 	return weightedAverage(t.cumulative[upper-1], z2, t.cumulative[upper], z1) / t.processedWeight
 }
 
-func (t *TDigest) integratedQ(k float64) float64 {
-	return (math.Sin(math.Min(k, t.Compression)*math.Pi/t.Compression-math.Pi/2.0) + 1.0) / 2.0
+type scaler interface {
+	integratedQ(k, compression float64) float64
+	integratedLocation(q, compression float64) float64
 }
 
-func (t *TDigest) integratedLocation(q float64) float64 {
-	return t.Compression * (math.Asin(2.0*q-1.0) + math.Pi/2.0) / math.Pi
+type K1 struct{}
+
+func (*K1) integratedQ(k, compression float64) float64 {
+	return (math.Sin(math.Min(k, compression)*math.Pi/compression-math.Pi/2.0) + 1.0) / 2.0
+}
+
+func (*K1) integratedLocation(q, compression float64) float64 {
+	return compression * (math.Asin(2.0*q-1.0) + math.Pi/2.0) / math.Pi
 }
 
 func weightedAverage(x1, w1, x2, w2 float64) float64 {
@@ -263,9 +278,11 @@ const decayLimit = 0.00002656139889
 // and similarly the ranking/selection will not be
 // (provided we use scale function which keeps small enough bins towards the top)
 func (t *TDigest) decay() {
-	t.process()
+	t.processIt(false)
 	var weight float64
 	var remove []int
+	t.cumulative = t.cumulative[:0]
+	prev := 0.0
 	for i := range t.processed {
 		c := &t.processed[i]
 		c.Weight = c.Weight * t.decayValue
@@ -273,8 +290,17 @@ func (t *TDigest) decay() {
 			remove = append(remove, i)
 		} else {
 			weight += c.Weight
+			t.cumulative = append(t.cumulative, prev+c.Weight/2.0)
+			prev = prev + c.Weight
 		}
 	}
+	t.cumulative = append(t.cumulative, prev)
+
+	//for i := range t.unprocessed {
+	//	c := &t.unprocessed[i]
+	//	c.Weight = c.Weight * t.decayValue
+	//	weight += c.Weight
+	//}
 	if len(remove) > 0 {
 		for i, c := range remove {
 			calculated := c - i

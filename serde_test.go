@@ -9,8 +9,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-
-
 // add the values [0,n) to a centroid set, equal weights
 func simpleTDigest(n int) *TDigest {
 	d := NewWithDecay(1000, 0.9, 500)
@@ -218,9 +216,9 @@ func testUnmarshal(t *testing.T) {
 			0x00, 0x00, 0x00, 0x00,
 		},
 		&TDigest{
-			processed:   make(CentroidList, 0),
-			Compression: 100,
-			processedWeight:  0,
+			processed:       make(CentroidList, 0),
+			Compression:     100,
+			processedWeight: 0,
 		},
 	))
 	t.Run("one centroid", testcase(
@@ -236,11 +234,11 @@ func testUnmarshal(t *testing.T) {
 			processed: []Centroid{
 				{
 					Weight: 1,
-					Mean:  1,
+					Mean:   1,
 				},
 			},
-			Compression: 100,
-			processedWeight:  1,
+			Compression:     100,
+			processedWeight: 1,
 		},
 	))
 	t.Run("two centroids", testcase(
@@ -258,16 +256,15 @@ func testUnmarshal(t *testing.T) {
 			processed: CentroidList{
 				{
 					Weight: 1,
-					Mean:  1,
+					Mean:   1,
 				},
 				{
 					Weight: 1,
-					Mean:  2,
+					Mean:   2,
 				},
 			},
-			Compression: 100,
-			processedWeight:  2,
+			Compression:     100,
+			processedWeight: 2,
 		},
 	))
 }
-

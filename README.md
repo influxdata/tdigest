@@ -4,6 +4,9 @@ This is an implementation of Ted Dunning's [t-digest](https://github.com/tdunnin
 
 The implementation is based off [Derrick Burns' C++ implementation](https://github.com/derrickburns/tdigest).
 
+## Changes in this fork
+* Added `TDigest.Marshal` func for serialization in [ClickHouse](https://github.com/yandex/ClickHouse) compatible format.
+
 ## Example
 
 ```go

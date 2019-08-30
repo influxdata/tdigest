@@ -1,6 +1,8 @@
 package tdigest
 
 import (
+	"encoding/binary"
+	"io"
 	"math"
 	"sort"
 )
@@ -226,4 +228,28 @@ func unprocessedSize(size int, compression float64) int {
 		return int(8 * math.Ceil(compression))
 	}
 	return size
+}
+
+func (t *TDigest) Marshal(w io.Writer) (err error) {
+	t.process()
+
+	cnt := t.processed.Len()
+
+	var tmp [binary.MaxVarintLen64]byte
+	n := binary.PutUvarint(tmp[:], uint64(cnt))
+	if _, err = w.Write(tmp[:n]); err != nil {
+		return err
+	}
+
+	for i := 0; i < cnt; i++ {
+		centroid := &t.processed[i]
+		if err = binary.Write(w, binary.LittleEndian, float32(centroid.Mean)); err != nil {
+			return err
+		}
+		if err = binary.Write(w, binary.LittleEndian, float32(centroid.Weight)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

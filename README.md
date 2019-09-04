@@ -6,6 +6,7 @@ The implementation is based off [Derrick Burns' C++ implementation](https://gith
 
 ## Changes in this fork
 * Added `TDigest.Marshal` func for serialization in [ClickHouse](https://github.com/yandex/ClickHouse) compatible format.
+* Added `TDigest.Clear` func for reusing memory
 
 ## Example
 

@@ -253,3 +253,13 @@ func (t *TDigest) Marshal(w io.Writer) (err error) {
 
 	return nil
 }
+
+func (t *TDigest) Clear() {
+	t.processed = t.processed[:0]
+	t.unprocessed = t.unprocessed[:0]
+	t.cumulative = nil
+	t.processedWeight = 0
+	t.unprocessedWeight = 0
+	t.min = math.MaxFloat64
+	t.max = -math.MaxFloat64
+}

@@ -224,6 +224,22 @@ func TestTdigest_CDFs(t *testing.T) {
 	}
 }
 
+func TestTdigest_Reset(t *testing.T) {
+	td := tdigest.New()
+	for _, x := range NormalData {
+		td.Add(x, 1)
+	}
+	q1 := td.Quantile(0.9)
+
+	td.Reset()
+	for _, x := range NormalData {
+		td.Add(x, 1)
+	}
+	if q2 := td.Quantile(0.9); q2 != q1 {
+		t.Errorf("unexpected quantile, got %g want %g", q2, q1)
+	}
+}
+
 var quantiles = []float64{0.1, 0.5, 0.9, 0.99, 0.999}
 
 func BenchmarkTDigest_Add(b *testing.B) {

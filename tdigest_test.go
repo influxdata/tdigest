@@ -1,6 +1,7 @@
 package tdigest_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/influxdata/tdigest"
@@ -261,5 +262,55 @@ func BenchmarkTDigest_Quantile(b *testing.B) {
 		for _, q := range quantiles {
 			x += td.Quantile(q)
 		}
+	}
+}
+
+func TestTdigest_Centroids(t *testing.T) {
+	tests := []struct {
+		name   string
+		data   []float64
+		digest *tdigest.TDigest
+		want   tdigest.CentroidList
+	}{
+		{
+			name: "increasing",
+			data: []float64{1, 2, 3, 4, 5},
+			want: tdigest.CentroidList{
+				tdigest.Centroid{
+					Mean:   1.0,
+					Weight: 1.0,
+				},
+
+				tdigest.Centroid{
+					Mean:   2.5,
+					Weight: 2.0,
+				},
+
+				tdigest.Centroid{
+					Mean:   4.0,
+					Weight: 1.0,
+				},
+
+				tdigest.Centroid{
+					Mean:   5.0,
+					Weight: 1.0,
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			td := tt.digest
+			if td == nil {
+				td = tdigest.NewWithCompression(3)
+				for _, x := range tt.data {
+					td.Add(x, 1)
+				}
+			}
+			got := td.Centroids()
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("unexpected list got %g want %g", got, tt.want)
+			}
+		})
 	}
 }

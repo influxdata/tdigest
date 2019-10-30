@@ -47,6 +47,43 @@ func init() {
 	}
 }
 
+
+func TestTdigest_Count(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     []float64
+		digest   *tdigest.TDigest
+		want     float64
+	}{
+		{
+			name:     "empty",
+			data:     []float64{},
+			want:     0,
+		},
+		{
+			name:     "not empty",
+			data:     []float64{5, 4},
+			want:     2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			td := tt.digest
+			if td == nil {
+				td = tdigest.NewWithCompression(1000)
+				for _, x := range tt.data {
+					td.Add(x, 1)
+				}
+			}
+			got := td.Count()
+			if got != tt.want {
+				t.Errorf("unexpected count, got %g want %g", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTdigest_Quantile(t *testing.T) {
 	tests := []struct {
 		name     string

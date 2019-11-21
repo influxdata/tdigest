@@ -335,6 +335,8 @@ func TestTdigest_Centroids(t *testing.T) {
 			},
 		},
 	}
+
+	var got tdigest.CentroidList
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			td := tt.digest
@@ -344,7 +346,7 @@ func TestTdigest_Centroids(t *testing.T) {
 					td.Add(x, 1)
 				}
 			}
-			got := td.Centroids()
+			got = td.Centroids(got[:0])
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("unexpected list got %g want %g", got, tt.want)
 			}

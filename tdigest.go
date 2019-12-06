@@ -125,11 +125,9 @@ func (t *TDigest) process() {
 // Useful when aggregating multiple t-digests.
 //
 // Pass in the CentroidList as the buffer to write into.
-func (t *TDigest) Centroids() CentroidList {
+func (t *TDigest) Centroids(cl CentroidList) CentroidList {
 	t.process()
-	cl := make([]Centroid, len(t.processed))
-	copy(cl, t.processed)
-	return cl
+	return append(cl, t.processed...)
 }
 
 func (t *TDigest) Count() float64 {

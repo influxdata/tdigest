@@ -328,6 +328,28 @@ func TestTdigest_Reset(t *testing.T) {
 	}
 }
 
+func TestTdigest_OddInputs(t *testing.T) {
+	td := tdigest.New()
+	td.Add(math.NaN(), 1)
+	td.Add(1, math.NaN())
+	td.Add(1, 0)
+	td.Add(1, -1000)
+	if td.Count() != 0 {
+		t.Error("invalid value was alloed to be added")
+	}
+
+	// Infinite values are allowed.
+	td.Add(1, 1)
+	td.Add(2, 1)
+	td.Add(math.Inf(1), 1)
+	if q := td.Quantile(0.5); q != 2 {
+		t.Errorf("expected median value 2, got %f", q)
+	}
+	if q := td.Quantile(0.9); !math.IsInf(q, 1) {
+		t.Errorf("expected median value 2, got %f", q)
+	}
+}
+
 var quantiles = []float64{0.1, 0.5, 0.9, 0.99, 0.999}
 
 func BenchmarkTDigest_Add(b *testing.B) {

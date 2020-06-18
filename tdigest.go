@@ -52,9 +52,6 @@ func (t *TDigest) Reset() {
 
 // Add adds a value x with a weight w to the distribution.
 func (t *TDigest) Add(x, w float64) {
-	if math.IsNaN(x) {
-		return
-	}
 	t.AddCentroid(Centroid{Mean: x, Weight: w})
 }
 
@@ -69,7 +66,15 @@ func (t *TDigest) AddCentroidList(c CentroidList) {
 }
 
 // AddCentroid adds a single centroid.
+// Weights which are not a number or are <= 0 are ignored, as a NaN means.
 func (t *TDigest) AddCentroid(c Centroid) {
+	if math.IsNaN(c.Mean) {
+		return
+	}
+	if c.Weight <= 0 || math.IsNaN(c.Weight) || math.IsInf(c.Weight, 1) {
+		return
+	}
+
 	t.unprocessed = append(t.unprocessed, c)
 	t.unprocessedWeight += c.Weight
 

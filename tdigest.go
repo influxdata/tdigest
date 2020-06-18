@@ -84,6 +84,17 @@ func (t *TDigest) AddCentroid(c Centroid) {
 	}
 }
 
+// Merges the supplied digest into this digest. Functionally equivalent to
+// calling t.AddCentroidList(t2.Centroids(nil)), but avoids making an extra
+// copy of the CentroidList.
+func (t *TDigest) Merge(t2 *TDigest) {
+	t2.process()
+
+	for i := range t2.processed {
+		t.AddCentroid(t2.processed[i])
+	}
+}
+
 func (t *TDigest) process() {
 	if t.unprocessed.Len() > 0 ||
 		t.processed.Len() > t.maxProcessed {
@@ -121,7 +132,8 @@ func (t *TDigest) process() {
 // Centroids returns a copy of processed centroids.
 // Useful when aggregating multiple t-digests.
 //
-// Pass in the CentroidList as the buffer to write into.
+// Centroids are appended to the passed CentroidList; if you're re-using a
+// buffer, be sure to pass cl[:0].
 func (t *TDigest) Centroids(cl CentroidList) CentroidList {
 	t.process()
 	return append(cl, t.processed...)

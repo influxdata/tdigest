@@ -60,8 +60,11 @@ func (t *TDigest) Add(x, w float64) {
 
 // AddCentroidList can quickly add multiple centroids.
 func (t *TDigest) AddCentroidList(c CentroidList) {
-	for _, c := range c {
-		t.AddCentroid(c)
+	// It's possible to optimize this by bulk-copying the slice, but this
+	// yields just a 1-2% speedup (most time is in process()), so not worth
+	// the complexity.
+	for i := range c {
+		t.AddCentroid(c[i])
 	}
 }
 

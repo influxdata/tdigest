@@ -310,6 +310,37 @@ func BenchmarkTDigest_Add(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkTDigest_AddCentroid(b *testing.B) {
+	centroids := make(tdigest.CentroidList, len(NormalData))
+	for i := range centroids {
+		centroids[i].Mean = NormalData[i]
+		centroids[i].Weight = 1
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		td := tdigest.NewWithCompression(1000)
+		for i := range centroids {
+			td.AddCentroid(centroids[i])
+		}
+	}
+}
+
+func BenchmarkTDigest_AddCentroidList(b *testing.B) {
+	centroids := make(tdigest.CentroidList, len(NormalData))
+	for i := range centroids {
+		centroids[i].Mean = NormalData[i]
+		centroids[i].Weight = 1
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		td := tdigest.NewWithCompression(1000)
+		td.AddCentroidList(centroids)
+	}
+}
+
 func BenchmarkTDigest_Quantile(b *testing.B) {
 	td := tdigest.NewWithCompression(1000)
 	for _, x := range NormalData {

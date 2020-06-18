@@ -120,6 +120,18 @@ func TestTdigest_Count(t *testing.T) {
 			}
 		})
 	}
+
+	got := NormalDigest.Count()
+	want := float64(len(NormalData))
+	if got != want {
+		t.Errorf("unexpected count for NormalDigest, got %g want %g", got, want)
+	}
+
+	got = UniformDigest.Count()
+	want = float64(len(UniformData))
+	if got != want {
+		t.Errorf("unexpected count for UniformDigest, got %g want %g", got, want)
+	}
 }
 
 func TestTdigest_Quantile(t *testing.T) {

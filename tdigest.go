@@ -124,11 +124,7 @@ func (t *TDigest) Centroids(cl CentroidList) CentroidList {
 
 func (t *TDigest) Count() float64 {
 	t.process()
-	count := 0.0
-	for _, centroid := range t.processed {
-		count += centroid.Weight
-	}
-	return count
+	return t.processedWeight
 }
 
 func (t *TDigest) updateCumulative() {

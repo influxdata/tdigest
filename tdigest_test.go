@@ -47,23 +47,45 @@ func init() {
 	}
 }
 
+// All Add methods should yield equivalent results.
+func TestTdigest_AddFuncs(t *testing.T) {
+	centroids := NormalDigest.Centroids(nil)
+
+	addDigest := tdigest.NewWithCompression(10)
+	addCentroidDigest := tdigest.NewWithCompression(10)
+	addCentroidListDigest := tdigest.NewWithCompression(10)
+
+	for _, c := range centroids {
+		addDigest.Add(c.Mean, c.Weight)
+		addCentroidDigest.AddCentroid(c)
+	}
+	addCentroidListDigest.AddCentroidList(centroids)
+
+	addCentroids := addDigest.Centroids(nil)
+	if !reflect.DeepEqual(addCentroidDigest.Centroids(nil), addCentroids) {
+		t.Error("AddCentroid() produced results different from Add()")
+	}
+	if !reflect.DeepEqual(addCentroidListDigest.Centroids(nil), addCentroids) {
+		t.Error("AddCentroidList() produced results different from Add()")
+	}
+}
 
 func TestTdigest_Count(t *testing.T) {
 	tests := []struct {
-		name     string
-		data     []float64
-		digest   *tdigest.TDigest
-		want     float64
+		name   string
+		data   []float64
+		digest *tdigest.TDigest
+		want   float64
 	}{
 		{
-			name:     "empty",
-			data:     []float64{},
-			want:     0,
+			name: "empty",
+			data: []float64{},
+			want: 0,
 		},
 		{
-			name:     "not empty",
-			data:     []float64{5, 4},
-			want:     2,
+			name: "not empty",
+			data: []float64{5, 4},
+			want: 2,
 		},
 	}
 

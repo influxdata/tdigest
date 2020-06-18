@@ -60,18 +60,8 @@ func (t *TDigest) Add(x, w float64) {
 
 // AddCentroidList can quickly add multiple centroids.
 func (t *TDigest) AddCentroidList(c CentroidList) {
-	l := c.Len()
-	for i := 0; i < l; i++ {
-		diff := l - i
-		room := t.maxUnprocessed - t.unprocessed.Len()
-		mid := i + diff
-		if room < diff {
-			mid = i + room
-		}
-		for i < mid {
-			t.AddCentroid(c[i])
-			i++
-		}
+	for _, c := range c {
+		t.AddCentroid(c)
 	}
 }
 

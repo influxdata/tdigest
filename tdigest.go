@@ -109,7 +109,6 @@ func (t *TDigest) process() {
 		}
 		t.min = math.Min(t.min, t.processed[0].Mean)
 		t.max = math.Max(t.max, t.processed[t.processed.Len()-1].Mean)
-		t.updateCumulative()
 		t.unprocessed.Clear()
 	}
 }
@@ -133,6 +132,13 @@ func (t *TDigest) Count() float64 {
 }
 
 func (t *TDigest) updateCumulative() {
+	// Weight can only increase, so the final cumulative value will always be
+	// either equal to, or less than, the total weight. If they are the same,
+	// then nothing has changed since the last update.
+	if len(t.cumulative) > 0 && t.cumulative[len(t.cumulative)-1] == t.processedWeight {
+		return
+	}
+
 	if n := t.processed.Len() + 1; n <= cap(t.cumulative) {
 		t.cumulative = t.cumulative[:n]
 	} else {
@@ -153,6 +159,7 @@ func (t *TDigest) updateCumulative() {
 // Returns NaN if Count is zero or bad inputs.
 func (t *TDigest) Quantile(q float64) float64 {
 	t.process()
+	t.updateCumulative()
 	if q < 0 || q > 1 || t.processed.Len() == 0 {
 		return math.NaN()
 	}
@@ -182,6 +189,7 @@ func (t *TDigest) Quantile(q float64) float64 {
 // CDF returns the cumulative distribution function for a given value x.
 func (t *TDigest) CDF(x float64) float64 {
 	t.process()
+	t.updateCumulative()
 	switch t.processed.Len() {
 	case 0:
 		return 0.0

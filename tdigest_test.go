@@ -1,6 +1,8 @@
 package tdigest_test
 
 import (
+	"fmt"
+	"math"
 	"reflect"
 	"testing"
 
@@ -47,13 +49,28 @@ func init() {
 	}
 }
 
+// Compares the quantile results of two digests, and fails if the
+// fractional err exceeds maxErr.
+// Always fails if the total count differs.
+func compareQuantiles(td1, td2 *tdigest.TDigest, maxErr float64) error {
+	if td1.Count() != td2.Count() {
+		return fmt.Errorf("counts are not equal, %d vs %d", int64(td1.Count()), int64(td2.Count()))
+	}
+	for q := 0.05; q < 1; q += 0.05 {
+		if math.Abs(td1.Quantile(q)-td2.Quantile(q))/td1.Quantile(q) > maxErr {
+			return fmt.Errorf("quantile %g differs, %g vs %g", q, td1.Quantile(q), td2.Quantile(q))
+		}
+	}
+	return nil
+}
+
 // All Add methods should yield equivalent results.
 func TestTdigest_AddFuncs(t *testing.T) {
 	centroids := NormalDigest.Centroids(nil)
 
-	addDigest := tdigest.NewWithCompression(10)
-	addCentroidDigest := tdigest.NewWithCompression(10)
-	addCentroidListDigest := tdigest.NewWithCompression(10)
+	addDigest := tdigest.NewWithCompression(100)
+	addCentroidDigest := tdigest.NewWithCompression(100)
+	addCentroidListDigest := tdigest.NewWithCompression(100)
 
 	for _, c := range centroids {
 		addDigest.Add(c.Mean, c.Weight)
@@ -61,12 +78,11 @@ func TestTdigest_AddFuncs(t *testing.T) {
 	}
 	addCentroidListDigest.AddCentroidList(centroids)
 
-	addCentroids := addDigest.Centroids(nil)
-	if !reflect.DeepEqual(addCentroidDigest.Centroids(nil), addCentroids) {
-		t.Error("AddCentroid() produced results different from Add()")
+	if err := compareQuantiles(addDigest, addCentroidDigest, 0.01); err != nil {
+		t.Errorf("AddCentroid() differs from from Add(): %s", err.Error())
 	}
-	if !reflect.DeepEqual(addCentroidListDigest.Centroids(nil), addCentroids) {
-		t.Error("AddCentroidList() produced results different from Add()")
+	if err := compareQuantiles(addDigest, addCentroidListDigest, 0.01); err != nil {
+		t.Errorf("AddCentroidList() differs from from Add(): %s", err.Error())
 	}
 }
 

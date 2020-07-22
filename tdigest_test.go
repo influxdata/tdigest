@@ -1,6 +1,8 @@
 package tdigest_test
 
 import (
+	"fmt"
+	"math"
 	"reflect"
 	"testing"
 
@@ -47,23 +49,59 @@ func init() {
 	}
 }
 
+// Compares the quantile results of two digests, and fails if the
+// fractional err exceeds maxErr.
+// Always fails if the total count differs.
+func compareQuantiles(td1, td2 *tdigest.TDigest, maxErr float64) error {
+	if td1.Count() != td2.Count() {
+		return fmt.Errorf("counts are not equal, %d vs %d", int64(td1.Count()), int64(td2.Count()))
+	}
+	for q := 0.05; q < 1; q += 0.05 {
+		if math.Abs(td1.Quantile(q)-td2.Quantile(q))/td1.Quantile(q) > maxErr {
+			return fmt.Errorf("quantile %g differs, %g vs %g", q, td1.Quantile(q), td2.Quantile(q))
+		}
+	}
+	return nil
+}
+
+// All Add methods should yield equivalent results.
+func TestTdigest_AddFuncs(t *testing.T) {
+	centroids := NormalDigest.Centroids(nil)
+
+	addDigest := tdigest.NewWithCompression(100)
+	addCentroidDigest := tdigest.NewWithCompression(100)
+	addCentroidListDigest := tdigest.NewWithCompression(100)
+
+	for _, c := range centroids {
+		addDigest.Add(c.Mean, c.Weight)
+		addCentroidDigest.AddCentroid(c)
+	}
+	addCentroidListDigest.AddCentroidList(centroids)
+
+	if err := compareQuantiles(addDigest, addCentroidDigest, 0.01); err != nil {
+		t.Errorf("AddCentroid() differs from from Add(): %s", err.Error())
+	}
+	if err := compareQuantiles(addDigest, addCentroidListDigest, 0.01); err != nil {
+		t.Errorf("AddCentroidList() differs from from Add(): %s", err.Error())
+	}
+}
 
 func TestTdigest_Count(t *testing.T) {
 	tests := []struct {
-		name     string
-		data     []float64
-		digest   *tdigest.TDigest
-		want     float64
+		name   string
+		data   []float64
+		digest *tdigest.TDigest
+		want   float64
 	}{
 		{
-			name:     "empty",
-			data:     []float64{},
-			want:     0,
+			name: "empty",
+			data: []float64{},
+			want: 0,
 		},
 		{
-			name:     "not empty",
-			data:     []float64{5, 4},
-			want:     2,
+			name: "not empty",
+			data: []float64{5, 4},
+			want: 2,
 		},
 	}
 
@@ -288,6 +326,37 @@ func BenchmarkTDigest_Add(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkTDigest_AddCentroid(b *testing.B) {
+	centroids := make(tdigest.CentroidList, len(NormalData))
+	for i := range centroids {
+		centroids[i].Mean = NormalData[i]
+		centroids[i].Weight = 1
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		td := tdigest.NewWithCompression(1000)
+		for i := range centroids {
+			td.AddCentroid(centroids[i])
+		}
+	}
+}
+
+func BenchmarkTDigest_AddCentroidList(b *testing.B) {
+	centroids := make(tdigest.CentroidList, len(NormalData))
+	for i := range centroids {
+		centroids[i].Mean = NormalData[i]
+		centroids[i].Weight = 1
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		td := tdigest.NewWithCompression(1000)
+		td.AddCentroidList(centroids)
+	}
+}
+
 func BenchmarkTDigest_Quantile(b *testing.B) {
 	td := tdigest.NewWithCompression(1000)
 	for _, x := range NormalData {

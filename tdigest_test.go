@@ -120,6 +120,18 @@ func TestTdigest_Count(t *testing.T) {
 			}
 		})
 	}
+
+	got := NormalDigest.Count()
+	want := float64(len(NormalData))
+	if got != want {
+		t.Errorf("unexpected count for NormalDigest, got %g want %g", got, want)
+	}
+
+	got = UniformDigest.Count()
+	want = float64(len(UniformData))
+	if got != want {
+		t.Errorf("unexpected count for UniformDigest, got %g want %g", got, want)
+	}
 }
 
 func TestTdigest_Quantile(t *testing.T) {
@@ -316,6 +328,60 @@ func TestTdigest_Reset(t *testing.T) {
 	}
 }
 
+func TestTdigest_OddInputs(t *testing.T) {
+	td := tdigest.New()
+	td.Add(math.NaN(), 1)
+	td.Add(1, math.NaN())
+	td.Add(1, 0)
+	td.Add(1, -1000)
+	if td.Count() != 0 {
+		t.Error("invalid value was alloed to be added")
+	}
+
+	// Infinite values are allowed.
+	td.Add(1, 1)
+	td.Add(2, 1)
+	td.Add(math.Inf(1), 1)
+	if q := td.Quantile(0.5); q != 2 {
+		t.Errorf("expected median value 2, got %f", q)
+	}
+	if q := td.Quantile(0.9); !math.IsInf(q, 1) {
+		t.Errorf("expected median value 2, got %f", q)
+	}
+}
+
+func TestTdigest_Merge(t *testing.T) {
+	// Repeat merges enough times to ensure we call compress()
+	numRepeats := 20
+	addDigest := tdigest.New()
+	for i := 0; i < numRepeats; i++ {
+		for _, c := range NormalDigest.Centroids(nil) {
+			addDigest.AddCentroid(c)
+		}
+		for _, c := range UniformDigest.Centroids(nil) {
+			addDigest.AddCentroid(c)
+		}
+	}
+
+	mergeDigest := tdigest.New()
+	for i := 0; i < numRepeats; i++ {
+		mergeDigest.Merge(NormalDigest)
+		mergeDigest.Merge(UniformDigest)
+	}
+
+	if err := compareQuantiles(addDigest, mergeDigest, 0.001); err != nil {
+		t.Errorf("AddCentroid() differs from from Merge(): %s", err.Error())
+	}
+
+	// Empty merge does nothing and has no effect on underlying centroids.
+	c1 := addDigest.Centroids(nil)
+	addDigest.Merge(tdigest.New())
+	c2 := addDigest.Centroids(nil)
+	if !reflect.DeepEqual(c1, c2) {
+		t.Error("Merging an empty digest altered data")
+	}
+}
+
 var quantiles = []float64{0.1, 0.5, 0.9, 0.99, 0.999}
 
 func BenchmarkTDigest_Add(b *testing.B) {
@@ -355,6 +421,25 @@ func BenchmarkTDigest_AddCentroidList(b *testing.B) {
 		td := tdigest.NewWithCompression(1000)
 		td.AddCentroidList(centroids)
 	}
+}
+
+func BenchmarkTDigest_Merge(b *testing.B) {
+	b.Run("AddCentroid", func(b *testing.B) {
+		var cl tdigest.CentroidList
+		td := tdigest.New()
+		for n := 0; n < b.N; n++ {
+			cl = NormalDigest.Centroids(cl[:0])
+			for i := range cl {
+				td.AddCentroid(cl[i])
+			}
+		}
+	})
+	b.Run("Merge", func(b *testing.B) {
+		td := tdigest.New()
+		for n := 0; n < b.N; n++ {
+			td.Merge(NormalDigest)
+		}
+	})
 }
 
 func BenchmarkTDigest_Quantile(b *testing.B) {

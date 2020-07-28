@@ -52,9 +52,6 @@ func (t *TDigest) Reset() {
 
 // Add adds a value x with a weight w to the distribution.
 func (t *TDigest) Add(x, w float64) {
-	if math.IsNaN(x) {
-		return
-	}
 	t.AddCentroid(Centroid{Mean: x, Weight: w})
 }
 
@@ -69,7 +66,12 @@ func (t *TDigest) AddCentroidList(c CentroidList) {
 }
 
 // AddCentroid adds a single centroid.
+// Weights which are not a number or are <= 0 are ignored, as are NaN means.
 func (t *TDigest) AddCentroid(c Centroid) {
+	if math.IsNaN(c.Mean) || c.Weight <= 0 || math.IsNaN(c.Weight) || math.IsInf(c.Weight, 1) {
+		return
+	}
+
 	t.unprocessed = append(t.unprocessed, c)
 	t.unprocessedWeight += c.Weight
 
@@ -77,6 +79,14 @@ func (t *TDigest) AddCentroid(c Centroid) {
 		t.unprocessed.Len() > t.maxUnprocessed {
 		t.process()
 	}
+}
+
+// Merges the supplied digest into this digest. Functionally equivalent to
+// calling t.AddCentroidList(t2.Centroids(nil)), but avoids making an extra
+// copy of the CentroidList.
+func (t *TDigest) Merge(t2 *TDigest) {
+	t2.process()
+	t.AddCentroidList(t2.processed)
 }
 
 func (t *TDigest) process() {
@@ -109,7 +119,6 @@ func (t *TDigest) process() {
 		}
 		t.min = math.Min(t.min, t.processed[0].Mean)
 		t.max = math.Max(t.max, t.processed[t.processed.Len()-1].Mean)
-		t.updateCumulative()
 		t.unprocessed.Clear()
 	}
 }
@@ -117,7 +126,8 @@ func (t *TDigest) process() {
 // Centroids returns a copy of processed centroids.
 // Useful when aggregating multiple t-digests.
 //
-// Pass in the CentroidList as the buffer to write into.
+// Centroids are appended to the passed CentroidList; if you're re-using a
+// buffer, be sure to pass cl[:0].
 func (t *TDigest) Centroids(cl CentroidList) CentroidList {
 	t.process()
 	return append(cl, t.processed...)
@@ -125,14 +135,20 @@ func (t *TDigest) Centroids(cl CentroidList) CentroidList {
 
 func (t *TDigest) Count() float64 {
 	t.process()
-	count := 0.0
-	for _, centroid := range t.processed {
-		count += centroid.Weight
-	}
-	return count
+
+	// t.process always updates t.processedWeight to the total count of all
+	// centroids, so we don't need to re-count here.
+	return t.processedWeight
 }
 
 func (t *TDigest) updateCumulative() {
+	// Weight can only increase, so the final cumulative value will always be
+	// either equal to, or less than, the total weight. If they are the same,
+	// then nothing has changed since the last update.
+	if len(t.cumulative) > 0 && t.cumulative[len(t.cumulative)-1] == t.processedWeight {
+		return
+	}
+
 	if n := t.processed.Len() + 1; n <= cap(t.cumulative) {
 		t.cumulative = t.cumulative[:n]
 	} else {
@@ -153,6 +169,7 @@ func (t *TDigest) updateCumulative() {
 // Returns NaN if Count is zero or bad inputs.
 func (t *TDigest) Quantile(q float64) float64 {
 	t.process()
+	t.updateCumulative()
 	if q < 0 || q > 1 || t.processed.Len() == 0 {
 		return math.NaN()
 	}
@@ -182,6 +199,7 @@ func (t *TDigest) Quantile(q float64) float64 {
 // CDF returns the cumulative distribution function for a given value x.
 func (t *TDigest) CDF(x float64) float64 {
 	t.process()
+	t.updateCumulative()
 	switch t.processed.Len() {
 	case 0:
 		return 0.0

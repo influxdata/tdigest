@@ -66,12 +66,9 @@ func (t *TDigest) AddCentroidList(c CentroidList) {
 }
 
 // AddCentroid adds a single centroid.
-// Weights which are not a number or are <= 0 are ignored, as a NaN means.
+// Weights which are not a number or are <= 0 are ignored, as are NaN means.
 func (t *TDigest) AddCentroid(c Centroid) {
-	if math.IsNaN(c.Mean) {
-		return
-	}
-	if c.Weight <= 0 || math.IsNaN(c.Weight) || math.IsInf(c.Weight, 1) {
+	if math.IsNaN(c.Mean) || c.Weight <= 0 || math.IsNaN(c.Weight) || math.IsInf(c.Weight, 1) {
 		return
 	}
 
@@ -89,10 +86,7 @@ func (t *TDigest) AddCentroid(c Centroid) {
 // copy of the CentroidList.
 func (t *TDigest) Merge(t2 *TDigest) {
 	t2.process()
-
-	for i := range t2.processed {
-		t.AddCentroid(t2.processed[i])
-	}
+	t.AddCentroidList(t2.processed)
 }
 
 func (t *TDigest) process() {
@@ -141,6 +135,9 @@ func (t *TDigest) Centroids(cl CentroidList) CentroidList {
 
 func (t *TDigest) Count() float64 {
 	t.process()
+
+	// t.process always updates t.processedWeight to the total count of all
+	// centroids, so we don't need to re-count here.
 	return t.processedWeight
 }
 

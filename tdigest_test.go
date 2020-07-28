@@ -351,35 +351,33 @@ func TestTdigest_OddInputs(t *testing.T) {
 }
 
 func TestTdigest_Merge(t *testing.T) {
-	td := tdigest.New()
-
 	// Repeat merges enough times to ensure we call compress()
 	numRepeats := 20
+	addDigest := tdigest.New()
 	for i := 0; i < numRepeats; i++ {
 		for _, c := range NormalDigest.Centroids(nil) {
-			td.AddCentroid(c)
+			addDigest.AddCentroid(c)
 		}
 		for _, c := range UniformDigest.Centroids(nil) {
-			td.AddCentroid(c)
+			addDigest.AddCentroid(c)
 		}
 	}
-	addCentroids := td.Centroids(nil)
 
-	td.Reset()
+	mergeDigest := tdigest.New()
 	for i := 0; i < numRepeats; i++ {
-		td.Merge(NormalDigest)
-		td.Merge(UniformDigest)
+		mergeDigest.Merge(NormalDigest)
+		mergeDigest.Merge(UniformDigest)
 	}
 
-	mergeCentroids := td.Centroids(nil)
-	if !reflect.DeepEqual(addCentroids, mergeCentroids) {
-		t.Error("Merge result differs from Add result")
+	if err := compareQuantiles(addDigest, mergeDigest, 0.001); err != nil {
+		t.Errorf("AddCentroid() differs from from Merge(): %s", err.Error())
 	}
 
-	// Empty merge does nothing
-	td.Merge(tdigest.New())
-	mergeCentroids = td.Centroids(nil)
-	if !reflect.DeepEqual(addCentroids, mergeCentroids) {
+	// Empty merge does nothing and has no effect on underlying centroids.
+	c1 := addDigest.Centroids(nil)
+	addDigest.Merge(tdigest.New())
+	c2 := addDigest.Centroids(nil)
+	if !reflect.DeepEqual(c1, c2) {
 		t.Error("Merging an empty digest altered data")
 	}
 }

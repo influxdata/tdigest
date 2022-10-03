@@ -4,6 +4,10 @@ This is an implementation of Ted Dunning's [t-digest](https://github.com/tdunnin
 
 The implementation is based off [Derrick Burns' C++ implementation](https://github.com/derrickburns/tdigest).
 
+TDigest is a data structure for accurate on-line accumulation of
+rank-based statistics such as quantiles and trimmed means.
+This is also known as incremental quantile estimation.
+
 ## Example
 
 ```go

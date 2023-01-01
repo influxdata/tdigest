@@ -63,6 +63,42 @@ func ByteSizeForCompression(comp float64) int {
 	return c * 40
 }
 
+func (t *TDigest) GetmaxProcessed() int {
+	return t.maxProcessed
+}
+
+func (t *TDigest) GetMaxUnprocessed() int {
+	return t.maxUnprocessed
+}
+
+func (t *TDigest) GetProcessed() CentroidList {
+	return t.processed
+}
+
+func (t *TDigest) GetUnprocessed() CentroidList {
+	return t.unprocessed
+}
+
+func (t *TDigest) GetCumulative() []float64 {
+	return t.cumulative
+}
+
+func (t *TDigest) GetProcessedWeight() float64 {
+	return t.processedWeight
+}
+
+func (t *TDigest) GetUnprocessedWeight() float64 {
+	return t.unprocessedWeight
+}
+
+func (t *TDigest) GetMin() float64 {
+	return t.min
+}
+
+func (t *TDigest) GetMax() float64 {
+	return t.max
+}
+
 // Reset resets the distribution to its initial state.
 func (t *TDigest) Reset() {
 	t.processed = t.processed[:0]

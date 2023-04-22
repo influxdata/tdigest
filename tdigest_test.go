@@ -27,6 +27,7 @@ var UniformData []float64
 
 var NormalDigest *tdigest.TDigest
 var UniformDigest *tdigest.TDigest
+var FPErrorDigest *tdigest.TDigest
 
 func init() {
 	dist := distuv.Normal{
@@ -49,6 +50,14 @@ func init() {
 		UniformData[i] = uniform.Float64() * 100
 		UniformDigest.Add(UniformData[i], 1)
 	}
+
+	FPErrorDigest = tdigest.NewWithCompression(1000)
+	FPErrorDigest.Add(0.1, 0.1)
+	FPErrorDigest.Add(0.2, 0.2)
+	FPErrorDigest.Add(0.1, 0.1)
+	FPErrorDigest.Add(0.2, 0.2)
+	FPErrorDigest.Add(0.1, 0.1)
+	FPErrorDigest.Add(0.2, 0.2)
 }
 
 // Compares the quantile results of two digests, and fails if the
@@ -208,6 +217,12 @@ func TestTdigest_Quantile(t *testing.T) {
 			quantile: 0.999,
 			digest:   UniformDigest,
 			want:     99.90103781043621,
+		},
+		{
+			name:     "fp error 100.0",
+			quantile: 1.0,
+			digest:   FPErrorDigest,
+			want:     0.2,
 		},
 	}
 	for _, tt := range tests {

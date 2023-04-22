@@ -209,15 +209,16 @@ func (t *TDigest) Quantile(q float64) float64 {
 		return t.cumulative[i] >= index
 	})
 
-	if lower+1 != len(t.cumulative) {
+	if lower+1 < len(t.cumulative) {
 		z1 := index - t.cumulative[lower-1]
 		z2 := t.cumulative[lower] - index
 		return weightedAverage(t.processed[lower-1].Mean, z2, t.processed[lower].Mean, z1)
 	}
 
-	z1 := index - t.processedWeight - t.processed[lower-1].Weight/2.0
-	z2 := (t.processed[lower-1].Weight / 2.0) - z1
-	return weightedAverage(t.processed[t.processed.Len()-1].Mean, z1, t.max, z2)
+	end := t.processed.Len() - 1
+	z1 := index - t.processedWeight - t.processed[end].Weight/2.0
+	z2 := (t.processed[end].Weight / 2.0) - z1
+	return weightedAverage(t.processed[end].Mean, z1, t.max, z2)
 }
 
 // CDF returns the cumulative distribution function for a given value x.

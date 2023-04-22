@@ -8,6 +8,7 @@ import (
 
 	"github.com/influxdata/tdigest"
 	"golang.org/x/exp/rand"
+	"gonum.org/v1/gonum/floats/scalar"
 	"gonum.org/v1/gonum/stat/distuv"
 )
 
@@ -16,7 +17,8 @@ const (
 	Mu    = 10
 	Sigma = 3
 
-	seed = 42
+	seed      = 42
+	tolerance = 1e-9
 )
 
 // NormalData is a slice of N random values that are normaly distributed with mean Mu and standard deviation Sigma.
@@ -25,6 +27,7 @@ var UniformData []float64
 
 var NormalDigest *tdigest.TDigest
 var UniformDigest *tdigest.TDigest
+var FPErrorDigest *tdigest.TDigest
 
 func init() {
 	dist := distuv.Normal{
@@ -47,6 +50,14 @@ func init() {
 		UniformData[i] = uniform.Float64() * 100
 		UniformDigest.Add(UniformData[i], 1)
 	}
+
+	FPErrorDigest = tdigest.NewWithCompression(1000)
+	FPErrorDigest.Add(0.1, 0.1)
+	FPErrorDigest.Add(0.2, 0.2)
+	FPErrorDigest.Add(0.1, 0.1)
+	FPErrorDigest.Add(0.2, 0.2)
+	FPErrorDigest.Add(0.1, 0.1)
+	FPErrorDigest.Add(0.2, 0.2)
 }
 
 // Compares the quantile results of two digests, and fails if the
@@ -62,6 +73,11 @@ func compareQuantiles(td1, td2 *tdigest.TDigest, maxErr float64) error {
 		}
 	}
 	return nil
+}
+
+// approx returns true if x and y are approximately equal to one another.
+func approx(x, y float64) bool {
+	return scalar.EqualWithinRel(x, y, tolerance)
 }
 
 // All Add methods should yield equivalent results.
@@ -115,7 +131,7 @@ func TestTdigest_Count(t *testing.T) {
 				}
 			}
 			got := td.Count()
-			if got != tt.want {
+			if !approx(got, tt.want) {
 				t.Errorf("unexpected count, got %g want %g", got, tt.want)
 			}
 		})
@@ -202,6 +218,12 @@ func TestTdigest_Quantile(t *testing.T) {
 			digest:   UniformDigest,
 			want:     99.90103781043621,
 		},
+		{
+			name:     "fp error 100.0",
+			quantile: 1.0,
+			digest:   FPErrorDigest,
+			want:     0.2,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -213,7 +235,7 @@ func TestTdigest_Quantile(t *testing.T) {
 				}
 			}
 			got := td.Quantile(tt.quantile)
-			if got != tt.want {
+			if !approx(got, tt.want) {
 				t.Errorf("unexpected quantile %f, got %g want %g", tt.quantile, got, tt.want)
 			}
 		})
@@ -305,7 +327,7 @@ func TestTdigest_CDFs(t *testing.T) {
 				}
 			}
 			got := td.CDF(tt.cdf)
-			if got != tt.want {
+			if !approx(got, tt.want) {
 				t.Errorf("unexpected CDF %f, got %g want %g", tt.cdf, got, tt.want)
 			}
 		})
@@ -323,7 +345,7 @@ func TestTdigest_Reset(t *testing.T) {
 	for _, x := range NormalData {
 		td.Add(x, 1)
 	}
-	if q2 := td.Quantile(0.9); q2 != q1 {
+	if q2 := td.Quantile(0.9); !approx(q2, q1) {
 		t.Errorf("unexpected quantile, got %g want %g", q2, q1)
 	}
 }
